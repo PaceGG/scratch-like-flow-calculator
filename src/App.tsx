@@ -5,26 +5,29 @@ import ReactFlow, {
   Node,
   NodeChange,
   NodeProps,
-  useReactFlow,
 } from "react-flow-renderer";
 
-const inputNodeStyle: React.CSSProperties = {
+const nodeBaseStyle: React.CSSProperties = {
   padding: 10,
-  border: "1px solid #222",
-  borderRadius: 5,
-  background: "#ddd",
-  width: 120,
-  textAlign: "center",
-};
-
-const operationNodeStyle: React.CSSProperties = {
-  padding: 10,
-  border: "2px solid #007bff",
-  borderRadius: 5,
-  background: "#e6f0ff",
+  borderRadius: 10,
   width: 160,
   textAlign: "center",
   position: "relative",
+  boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+  background: "#fff",
+  border: "2px solid #999",
+};
+
+const inputNodeStyle: React.CSSProperties = {
+  ...nodeBaseStyle,
+  background: "#e2e2e2",
+  border: "2px solid #666",
+};
+
+const operationNodeStyle: React.CSSProperties = {
+  ...nodeBaseStyle,
+  background: "#e6f0ff",
+  border: "2px solid #007bff",
 };
 
 const deleteButtonStyle: React.CSSProperties = {
@@ -150,15 +153,18 @@ export default function App() {
     (_: React.MouseEvent, node: Node) => {
       const snapDistance = 40;
       const thisNode = node;
-
+      const nodeWidth = 180;
       for (const other of nodes) {
         if (other.id === thisNode.id) continue;
 
-        const dx = thisNode.position.x - (other.position.x + 160);
+        const dx = thisNode.position.x - (other.position.x + nodeWidth);
         const dy = thisNode.position.y - other.position.y;
 
-        if (Math.abs(dx) < snapDistance && Math.abs(dy) < snapDistance) {
-          const newX = other.position.x + 160;
+        const closeEnoughX = Math.abs(dx) < snapDistance;
+        const closeEnoughY = Math.abs(dy) < snapDistance;
+
+        if (closeEnoughX && closeEnoughY) {
+          const newX = other.position.x + nodeWidth;
           const newY = other.position.y;
 
           setNodes((nds) =>
