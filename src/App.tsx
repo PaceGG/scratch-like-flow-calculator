@@ -1,26 +1,12 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import ReactFlow, {
   ReactFlowProvider,
-  addEdge,
   applyNodeChanges,
-  applyEdgeChanges,
-  MiniMap,
-  Controls,
-  Background,
-  Handle,
-  Position,
   Node,
-  Edge,
-  Connection,
   NodeChange,
-  EdgeChange,
+  NodeProps,
+  useReactFlow,
 } from "react-flow-renderer";
-
-type CustomNodeData = {
-  value?: string;
-  onChange?: (id: string, val: string) => void;
-  onDelete?: (id: string) => void;
-};
 
 const inputNodeStyle: React.CSSProperties = {
   padding: 10,
@@ -29,7 +15,6 @@ const inputNodeStyle: React.CSSProperties = {
   background: "#ddd",
   width: 120,
   textAlign: "center",
-  position: "relative",
 };
 
 const operationNodeStyle: React.CSSProperties = {
@@ -53,37 +38,34 @@ const deleteButtonStyle: React.CSSProperties = {
   userSelect: "none",
 };
 
-function InputNode() {
+type CustomData = {
+  value?: string;
+  onChange?: (id: string, val: string) => void;
+  onDelete?: (id: string) => void;
+};
+
+const InputNode = () => {
   return (
     <div style={inputNodeStyle}>
       <div>Начальное число</div>
       <div style={{ fontWeight: "bold", fontSize: 20 }}>0</div>
-      <Handle type="source" position={Position.Right} id="out" />
     </div>
   );
-}
+};
 
-function AddNode({ data, id }: { data: CustomNodeData; id: string }) {
-  const onChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
-    data.onChange?.(id, evt.target.value);
+const AddNode = ({ id, data }: NodeProps<CustomData>) => {
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    data.onChange?.(id, e.target.value);
   };
-
-  const onDeleteClick = (evt: React.MouseEvent) => {
-    evt.stopPropagation();
+  const onDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
     data.onDelete?.(id);
   };
-
   return (
     <div style={operationNodeStyle}>
-      <div
-        style={deleteButtonStyle}
-        title="Удалить блок"
-        onClick={onDeleteClick}
-        aria-label="Удалить блок"
-      >
+      <div style={deleteButtonStyle} onClick={onDelete}>
         ×
       </div>
-      <Handle type="target" position={Position.Left} id="in" />
       <div>Прибавить</div>
       <input
         type="number"
@@ -91,32 +73,23 @@ function AddNode({ data, id }: { data: CustomNodeData; id: string }) {
         onChange={onChange}
         style={{ width: "100%", marginTop: 5 }}
       />
-      <Handle type="source" position={Position.Right} id="out" />
     </div>
   );
-}
+};
 
-function MultiplyNode({ data, id }: { data: CustomNodeData; id: string }) {
-  const onChange = (evt: React.ChangeEvent<HTMLInputElement>) => {
-    data.onChange?.(id, evt.target.value);
+const MultiplyNode = ({ id, data }: NodeProps<CustomData>) => {
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    data.onChange?.(id, e.target.value);
   };
-
-  const onDeleteClick = (evt: React.MouseEvent) => {
-    evt.stopPropagation();
+  const onDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
     data.onDelete?.(id);
   };
-
   return (
     <div style={operationNodeStyle}>
-      <div
-        style={deleteButtonStyle}
-        title="Удалить блок"
-        onClick={onDeleteClick}
-        aria-label="Удалить блок"
-      >
+      <div style={deleteButtonStyle} onClick={onDelete}>
         ×
       </div>
-      <Handle type="target" position={Position.Left} id="in" />
       <div>Умножить на</div>
       <input
         type="number"
@@ -124,10 +97,9 @@ function MultiplyNode({ data, id }: { data: CustomNodeData; id: string }) {
         onChange={onChange}
         style={{ width: "100%", marginTop: 5 }}
       />
-      <Handle type="source" position={Position.Right} id="out" />
     </div>
   );
-}
+};
 
 const nodeTypes = {
   inputNode: InputNode,
@@ -135,206 +107,153 @@ const nodeTypes = {
   multiplyNode: MultiplyNode,
 };
 
-const initialNodes: Node<CustomNodeData>[] = [
+const initialNodes: Node<CustomData>[] = [
   {
     id: "1",
     type: "inputNode",
-    data: {},
     position: { x: 50, y: 100 },
+    data: {},
   },
 ];
 
-const initialEdges: Edge[] = [];
+export default function App() {
+  const [nodes, setNodes] = useState<Node<CustomData>[]>(initialNodes);
+  const [connections, setConnections] = useState<{ [key: string]: string }>({});
 
-function App() {
-  const [nodes, setNodes] = useState<Node<CustomNodeData>[]>(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
-
-  // Обновление значения в узле
   const onChangeNodeValue = useCallback((id: string, val: string) => {
     setNodes((nds) =>
-      nds.map((node) =>
-        node.id === id
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                value: val,
-                onChange: onChangeNodeValue,
-                onDelete: onDeleteNode,
-              },
-            }
-          : node
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, value: val } } : n
       )
     );
   }, []);
 
-  // Удаление узла по id
   const onDeleteNode = useCallback((id: string) => {
     setNodes((nds) => nds.filter((n) => n.id !== id));
-    setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
+    setConnections((conns) => {
+      const newConns = { ...conns };
+      delete newConns[id];
+      for (const key in newConns) {
+        if (newConns[key] === id) delete newConns[key];
+      }
+      return newConns;
+    });
   }, []);
-
-  // Обновим onChange и onDelete в data всех узлов кроме входного
-  useEffect(() => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.type === "addNode" || node.type === "multiplyNode") {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              onChange: onChangeNodeValue,
-              onDelete: onDeleteNode,
-            },
-          };
-        }
-        return node;
-      })
-    );
-  }, [onChangeNodeValue, onDeleteNode]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
       setNodes((nds) => applyNodeChanges(changes, nds)),
     []
   );
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) =>
-      setEdges((eds) => applyEdgeChanges(changes, eds)),
-    []
-  );
 
-  // Ограничение: один вход и один выход на каждый узел
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      const { source, target } = connection;
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      const snapDistance = 40;
+      const thisNode = node;
 
-      // Проверяем, нет ли уже входа у target
-      const hasTargetInput = edges.some(
-        (e) => e.target === target && e.targetHandle === connection.targetHandle
-      );
-      if (hasTargetInput) {
-        alert("У этого блока уже есть вход");
-        return;
+      for (const other of nodes) {
+        if (other.id === thisNode.id) continue;
+
+        const dx = thisNode.position.x - (other.position.x + 160);
+        const dy = thisNode.position.y - other.position.y;
+
+        if (Math.abs(dx) < snapDistance && Math.abs(dy) < snapDistance) {
+          const newX = other.position.x + 160;
+          const newY = other.position.y;
+
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === thisNode.id
+                ? { ...n, position: { x: newX, y: newY } }
+                : n
+            )
+          );
+
+          setConnections((conns) => ({ ...conns, [other.id]: thisNode.id }));
+          return;
+        }
       }
-
-      // Проверяем, нет ли уже выхода у source
-      const hasSourceOutput = edges.some(
-        (e) => e.source === source && e.sourceHandle === connection.sourceHandle
-      );
-      if (hasSourceOutput) {
-        alert("У этого блока уже есть выход");
-        return;
-      }
-
-      setEdges((eds) => addEdge(connection, eds));
     },
-    [edges]
+    [nodes]
   );
 
-  // Добавление блоков на доску
   const addNode = (type: "addNode" | "multiplyNode") => {
     const id = (nodes.length + 1).toString();
-    const newNode: Node<CustomNodeData> = {
+    const newNode: Node<CustomData> = {
       id,
       type,
+      position: { x: 100 + nodes.length * 180, y: 200 },
       data: { value: "0", onChange: onChangeNodeValue, onDelete: onDeleteNode },
-      position: {
-        x: 50 + nodes.length * 180,
-        y: 200,
-      },
     };
-    setNodes((nds) => nds.concat(newNode));
+    setNodes((nds) => [...nds, newNode]);
   };
 
-  // Вычисление результата цепочки
   const calculateResult = () => {
-    let currentId = "1";
     let result = 0;
+    let currentId = "1";
 
-    while (true) {
-      const outgoingEdges = edges.filter((e) => e.source === currentId);
-      if (outgoingEdges.length === 0) break;
+    while (connections[currentId]) {
+      const nextId = connections[currentId];
+      const node = nodes.find((n) => n.id === nextId);
+      if (!node) break;
 
-      const nextId = outgoingEdges[0].target;
-      const nextNode = nodes.find((n) => n.id === nextId);
-      if (!nextNode) break;
-
-      const val = parseFloat(nextNode.data.value ?? "");
+      const val = parseFloat(node.data.value ?? "");
       if (isNaN(val)) {
-        alert("Введите число в блоке " + nextNode.id);
+        alert("Введите число в блоке " + nextId);
         return;
       }
 
-      if (nextNode.type === "addNode") {
-        result += val;
-      } else if (nextNode.type === "multiplyNode") {
-        result *= val;
-      }
+      if (node.type === "addNode") result += val;
+      else if (node.type === "multiplyNode") result *= val;
 
       currentId = nextId;
     }
 
     alert("Результат: " + result);
-    console.log("Результат:", result);
   };
 
   return (
     <ReactFlowProvider>
       <div style={{ height: "100vh", display: "flex" }}>
-        {/* Панель добавления блоков */}
         <div
           style={{
             width: 150,
             padding: 10,
             borderRight: "1px solid #ccc",
             background: "#f0f0f0",
-            boxSizing: "border-box",
           }}
         >
           <h3>Добавить блок</h3>
+          <button onClick={() => addNode("addNode")}>Прибавить</button>
           <button
-            style={{ width: "100%", marginBottom: 8 }}
-            onClick={() => addNode("addNode")}
-          >
-            Прибавить
-          </button>
-          <button
-            style={{ width: "100%" }}
             onClick={() => addNode("multiplyNode")}
+            style={{ marginTop: 5 }}
           >
             Умножить
           </button>
-
-          <div style={{ marginTop: 20 }}>
-            <button onClick={calculateResult} style={{ width: "100%" }}>
-              Вычислить результат
-            </button>
-          </div>
+          <button onClick={calculateResult} style={{ marginTop: 20 }}>
+            Вычислить результат
+          </button>
         </div>
 
-        {/* Поле с React Flow */}
         <div style={{ flexGrow: 1 }}>
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={nodes.map((n) => ({
+              ...n,
+              data: {
+                ...n.data,
+                onChange: onChangeNodeValue,
+                onDelete: onDeleteNode,
+              },
+            }))}
+            edges={[]}
             onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onNodeDragStop={onNodeDragStop}
             nodeTypes={nodeTypes}
             fitView
-            snapToGrid
-            snapGrid={[15, 15]}
-          >
-            <MiniMap />
-            <Controls />
-            <Background gap={15} />
-          </ReactFlow>
+          />
         </div>
       </div>
     </ReactFlowProvider>
   );
 }
-
-export default App;
